@@ -31,6 +31,8 @@ export function VideoBlockView({
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(1);
   const [show, setShow] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -38,6 +40,23 @@ export function VideoBlockView({
     video.volume = volume;
     video.muted = muted;
   }, [volume, muted]);
+
+  // When the blob URL arrives, force a load so mobile WebViews pick up metadata
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !src) return;
+    setError(null);
+    setReady(false);
+    setDuration(0);
+    setCurrent(0);
+    setPlaying(false);
+    video.src = src;
+    try {
+      video.load();
+    } catch {
+      // ignore
+    }
+  }, [src]);
 
   useEffect(() => {
     if (!playing) {
@@ -48,13 +67,25 @@ export function VideoBlockView({
     return () => window.clearTimeout(t);
   }, [playing, current, show]);
 
+  function syncDuration(video: HTMLVideoElement) {
+    const d = video.duration;
+    if (Number.isFinite(d) && d > 0) {
+      setDuration(d);
+      setReady(true);
+    }
+  }
+
   async function togglePlay() {
     const video = videoRef.current;
-    if (!video) return;
-    if (video.paused) {
-      await video.play();
-    } else {
-      video.pause();
+    if (!video || error) return;
+    try {
+      if (video.paused) {
+        await video.play();
+      } else {
+        video.pause();
+      }
+    } catch {
+      setError("Playback failed. Try an MP4 (H.264) file.");
     }
   }
 
@@ -80,10 +111,9 @@ export function VideoBlockView({
         >
           <video
             ref={videoRef}
-            src={src || undefined}
             poster={poster || undefined}
             playsInline
-            preload="metadata"
+            preload="auto"
             className="media-frame max-h-[70vh] w-full bg-fg"
             onClick={(e) => {
               e.stopPropagation();
@@ -92,91 +122,121 @@ export function VideoBlockView({
             onPlay={() => setPlaying(true)}
             onPause={() => setPlaying(false)}
             onTimeUpdate={(e) => setCurrent(e.currentTarget.currentTime)}
-            onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)}
+            onLoadedMetadata={(e) => syncDuration(e.currentTarget)}
+            onDurationChange={(e) => syncDuration(e.currentTarget)}
+            onLoadedData={(e) => {
+              syncDuration(e.currentTarget);
+              setReady(true);
+            }}
+            onCanPlay={(e) => {
+              syncDuration(e.currentTarget);
+              setReady(true);
+            }}
+            onError={() => {
+              setError("This video can't play here. Use an MP4 encoded with H.264.");
+              setReady(false);
+              setDuration(0);
+            }}
           />
 
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              void togglePlay();
-            }}
-            className={cn(
-              "absolute inset-0 flex items-center justify-center transition-opacity duration-200",
-              playing && !show ? "opacity-0" : "opacity-100",
-            )}
-            aria-label={playing ? "Pause" : "Play"}
-          >
-            <span className="flex size-14 items-center justify-center rounded-full bg-fg/75 text-bg shadow-border">
-              {playing ? <Pause className="size-6" /> : <Play className="size-6 translate-x-0.5" />}
-            </span>
-          </button>
+          {error ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-fg/90 px-4 text-center">
+              <p className="text-sm text-bg">{error}</p>
+              <p className="text-xs text-bg/70">Phone camera clips are often HEVC and won't play in the browser.</p>
+            </div>
+          ) : !src || (!ready && !poster) ? (
+            <div className="absolute inset-0 flex items-center justify-center bg-fg/80">
+              <p className="text-sm text-bg/80">{src ? "Loading video…" : "Preparing video…"}</p>
+            </div>
+          ) : null}
 
-          <div
-            className={cn(
-              "absolute inset-x-0 bottom-0 from-fg/80 to-transparent bg-gradient-to-t px-3 pb-3 pt-8 text-bg transition-opacity duration-200",
-              playing && !show ? "opacity-0" : "opacity-100",
-            )}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <input
-              type="range"
-              min={0}
-              max={duration || 0}
-              step={0.05}
-              value={current}
-              onChange={(e) => {
-                const next = Number(e.target.value);
-                if (videoRef.current) videoRef.current.currentTime = next;
-                setCurrent(next);
+          {!error ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                void togglePlay();
               }}
-              className="folio-range w-full"
-              aria-label="Seek"
-            />
-            <div className="mt-2 flex items-center gap-2 text-xs tabular-nums">
-              <button
-                type="button"
-                className="flex size-9 items-center justify-center rounded-sm hover:bg-bg/15"
-                onClick={() => void togglePlay()}
-                aria-label={playing ? "Pause" : "Play"}
-              >
-                {playing ? <Pause className="size-4" /> : <Play className="size-4 translate-x-px" />}
-              </button>
-              <span>
-                {formatTime(current)} / {formatTime(duration)}
+              className={cn(
+                "absolute inset-0 flex items-center justify-center transition-opacity duration-200",
+                playing && !show ? "opacity-0" : "opacity-100",
+              )}
+              aria-label={playing ? "Pause" : "Play"}
+            >
+              <span className="flex size-14 items-center justify-center rounded-full bg-fg/75 text-bg shadow-border">
+                {playing ? <Pause className="size-6" /> : <Play className="size-6 translate-x-0.5" />}
               </span>
-              <button
-                type="button"
-                className="ml-1 flex size-9 items-center justify-center rounded-sm hover:bg-bg/15"
-                onClick={() => setMuted((m) => !m)}
-                aria-label={muted ? "Unmute" : "Mute"}
-              >
-                {muted || volume === 0 ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
-              </button>
+            </button>
+          ) : null}
+
+          {!error ? (
+            <div
+              className={cn(
+                "absolute inset-x-0 bottom-0 from-fg/80 to-transparent bg-gradient-to-t px-3 pb-3 pt-8 text-bg transition-opacity duration-200",
+                playing && !show ? "opacity-0" : "opacity-100",
+              )}
+              onClick={(e) => e.stopPropagation()}
+            >
               <input
                 type="range"
                 min={0}
-                max={1}
+                max={duration > 0 ? duration : 1}
                 step={0.05}
-                value={muted ? 0 : volume}
+                value={current}
+                disabled={duration <= 0}
                 onChange={(e) => {
-                  const v = Number(e.target.value);
-                  setVolume(v);
-                  setMuted(v === 0);
+                  const next = Number(e.target.value);
+                  if (videoRef.current) videoRef.current.currentTime = next;
+                  setCurrent(next);
                 }}
-                className="folio-range hidden w-20 sm:block"
-                aria-label="Volume"
+                className="folio-range w-full"
+                aria-label="Seek"
               />
-              <button
-                type="button"
-                className="ml-auto flex size-9 items-center justify-center rounded-sm hover:bg-bg/15"
-                onClick={() => void fullscreen()}
-                aria-label="Full screen"
-              >
-                <Maximize2 className="size-4" />
-              </button>
+              <div className="mt-2 flex items-center gap-2 text-xs tabular-nums">
+                <button
+                  type="button"
+                  className="flex size-9 items-center justify-center rounded-sm hover:bg-bg/15"
+                  onClick={() => void togglePlay()}
+                  aria-label={playing ? "Pause" : "Play"}
+                >
+                  {playing ? <Pause className="size-4" /> : <Play className="size-4 translate-x-px" />}
+                </button>
+                <span>
+                  {formatTime(current)} / {formatTime(duration)}
+                </span>
+                <button
+                  type="button"
+                  className="ml-1 flex size-9 items-center justify-center rounded-sm hover:bg-bg/15"
+                  onClick={() => setMuted((m) => !m)}
+                  aria-label={muted ? "Unmute" : "Mute"}
+                >
+                  {muted || volume === 0 ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
+                </button>
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={muted ? 0 : volume}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    setVolume(v);
+                    setMuted(v === 0);
+                  }}
+                  className="folio-range hidden w-20 sm:block"
+                  aria-label="Volume"
+                />
+                <button
+                  type="button"
+                  className="ml-auto flex size-9 items-center justify-center rounded-sm hover:bg-bg/15"
+                  onClick={() => void fullscreen()}
+                  aria-label="Full screen"
+                >
+                  <Maximize2 className="size-4" />
+                </button>
+              </div>
             </div>
-          </div>
+          ) : null}
         </div>
       </ResizableMedia>
     </>

@@ -4,12 +4,35 @@ import type { MediaRecord } from "./types";
 
 const urlCache = new Map<string, string>();
 
+function inferMime(name: string, fallback = "application/octet-stream"): string {
+  const lower = name.toLowerCase();
+  if (/\.mp4$/i.test(lower) || /\.m4v$/i.test(lower)) return "video/mp4";
+  if (/\.webm$/i.test(lower)) return "video/webm";
+  if (/\.mov$/i.test(lower)) return "video/quicktime";
+  if (/\.ogg$/i.test(lower) || /\.ogv$/i.test(lower)) return "video/ogg";
+  if (/\.png$/i.test(lower)) return "image/png";
+  if (/\.jpe?g$/i.test(lower)) return "image/jpeg";
+  if (/\.gif$/i.test(lower)) return "image/gif";
+  if (/\.webp$/i.test(lower)) return "image/webp";
+  if (/\.avif$/i.test(lower)) return "image/avif";
+  return fallback;
+}
+
+function ensureTypedBlob(blob: Blob, name: string, mimeType?: string): Blob {
+  const type = (mimeType && mimeType !== "application/octet-stream" ? mimeType : null)
+    || (blob.type && blob.type !== "application/octet-stream" ? blob.type : null)
+    || inferMime(name);
+  if (blob.type === type) return blob;
+  return new Blob([blob], { type });
+}
+
 export async function getMediaUrl(id: string): Promise<string> {
   const cached = urlCache.get(id);
   if (cached) return cached;
   const rec = await idbGetMedia(id);
   if (!rec) return "";
-  const url = URL.createObjectURL(rec.blob);
+  const typed = ensureTypedBlob(rec.blob, rec.name, rec.mimeType);
+  const url = URL.createObjectURL(typed);
   urlCache.set(id, url);
   return url;
 }
@@ -23,20 +46,24 @@ export function forgetMediaUrl(id: string) {
 }
 
 export async function putBlob(blob: Blob, name: string, mimeType?: string): Promise<MediaRecord> {
+  const typed = ensureTypedBlob(blob, name, mimeType);
   const rec: MediaRecord = {
     id: nid("m"),
-    mimeType: mimeType || blob.type || "application/octet-stream",
+    mimeType: typed.type || inferMime(name),
     name,
-    size: blob.size,
+    size: typed.size,
     createdAt: Date.now(),
-    blob,
+    blob: typed,
   };
   await idbPutMedia(rec);
   return rec;
 }
 
 export async function putFile(file: File): Promise<MediaRecord> {
-  return putBlob(file, file.name, file.type);
+  const mime = file.type && file.type !== "application/octet-stream"
+    ? file.type
+    : inferMime(file.name, "application/octet-stream");
+  return putBlob(file, file.name, mime);
 }
 
 export function isImageFile(file: File): boolean {
@@ -44,63 +71,89 @@ export function isImageFile(file: File): boolean {
 }
 
 export function isVideoFile(file: File): boolean {
-  return file.type.startsWith("video/") || /\.(mp4|webm|mov|m4v|ogg)$/i.test(file.name);
+  return file.type.startsWith("video/") || /\.(mp4|webm|mov|m4v|ogg|ogv)$/i.test(file.name);
 }
 
 export function captureVideoPoster(file: File): Promise<Blob | null> {
   return new Promise((resolve) => {
-    const url = URL.createObjectURL(file);
+    const mime = file.type && file.type !== "application/octet-stream"
+      ? file.type
+      : inferMime(file.name, "video/mp4");
+    const typed = file.type === mime ? file : new File([file], file.name, { type: mime });
+    const url = URL.createObjectURL(typed);
     const video = document.createElement("video");
     video.preload = "auto";
     video.muted = true;
     video.playsInline = true;
+    video.setAttribute("playsinline", "true");
     video.src = url;
 
-    const cleanup = () => URL.revokeObjectURL(url);
-    const fail = () => {
-      cleanup();
-      resolve(null);
+    let settled = false;
+    const finish = (result: Blob | null) => {
+      if (settled) return;
+      settled = true;
+      URL.revokeObjectURL(url);
+      resolve(result);
     };
 
     const snap = () => {
       try {
-        const w = video.videoWidth || 640;
-        const h = video.videoHeight || 360;
+        const w = video.videoWidth;
+        const h = video.videoHeight;
+        if (!w || !h) {
+          finish(null);
+          return;
+        }
         const canvas = document.createElement("canvas");
         canvas.width = w;
         canvas.height = h;
         const ctx = canvas.getContext("2d");
         if (!ctx) {
-          fail();
+          finish(null);
           return;
         }
         ctx.drawImage(video, 0, 0, w, h);
         canvas.toBlob(
-          (blob) => {
-            cleanup();
-            resolve(blob);
-          },
+          (blob) => finish(blob),
           "image/jpeg",
           0.82,
         );
       } catch {
-        fail();
+        finish(null);
       }
     };
 
-    video.addEventListener("error", fail, { once: true });
-    video.addEventListener(
-      "loadeddata",
-      () => {
-        if (video.readyState >= 2) {
-          snap();
-          return;
-        }
-        video.currentTime = Math.min(0.15, (video.duration || 1) / 4);
-        video.addEventListener("seeked", snap, { once: true });
-      },
-      { once: true },
-    );
+    const trySeekAndSnap = () => {
+      if (video.videoWidth > 0) {
+        snap();
+        return;
+      }
+      const target = Number.isFinite(video.duration) && video.duration > 0
+        ? Math.min(0.25, video.duration / 4)
+        : 0.1;
+      const onSeeked = () => snap();
+      video.addEventListener("seeked", onSeeked, { once: true });
+      try {
+        video.currentTime = target;
+      } catch {
+        snap();
+      }
+    };
+
+    video.addEventListener("error", () => finish(null), { once: true });
+    video.addEventListener("loadeddata", trySeekAndSnap, { once: true });
+    video.addEventListener("loadedmetadata", () => {
+      if (video.readyState >= 2) trySeekAndSnap();
+    }, { once: true });
+
+    // Android / WebView sometimes never fires without an explicit load
+    try {
+      video.load();
+    } catch {
+      // ignore
+    }
+
+    window.setTimeout(() => finish(null), 8000);
   });
 }
 
@@ -108,5 +161,6 @@ export async function fetchAsFile(path: string, name: string, mime: string): Pro
   const res = await fetch(path);
   if (!res.ok) throw new Error(`Failed to load ${path}`);
   const blob = await res.blob();
-  return new File([blob], name, { type: mime || blob.type });
+  const type = mime || blob.type || inferMime(name);
+  return new File([blob], name, { type });
 }
