@@ -10,11 +10,13 @@ A quiet multimedia notebook for writing, pictures, and video. Notes are one cont
 - Inline video player with poster, seek, volume, and fullscreen
 - Autosave to IndexedDB on this device
 - Search, rename, duplicate, delete
+- Home list grouped by last update: Today, Yesterday, Earlier this week, Older
 - Export the current note as Markdown (`.md`) — text keeps bold/italic structure; images and video become local placeholders
 - Text-to-speech with a preferred English female voice, play/pause, speed, and paragraph highlight
 
 ## What's new
 
+- **Home date groups** — The notebook list is sectioned by `updatedAt` into **Today**, **Yesterday**, **Earlier this week**, and **Older**, so recent work is easier to find without changing sort or search.
 - **Markdown export** — From an open note, use **Export** in the header to download a `.md` file of the title and body. Handy for backups or pasting into other apps. Embedded pictures and clips are referenced as `folio-media:` placeholders (media stays on this device in IndexedDB).
 - **Paste polish** — Pasting a screenshot or clipboard image now also checks clipboard items (not only the Files list), and shows a short confirmation toast.
 - **Search matching** — Note search now strips HTML the same way previews do, so queries match visible text more reliably.

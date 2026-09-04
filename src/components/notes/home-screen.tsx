@@ -26,6 +26,7 @@ import { ExportAllButton } from "@/components/notes/export-all-button";
 import { ThemeToggle } from "@/components/notes/theme-toggle";
 import { useMediaUrl } from "@/hooks/use-media-url";
 import { previewText, stripHtml } from "@/lib/notes/html";
+import { groupNotesByRelativeDate } from "@/lib/notes/relative-date";
 import { sortedNotes, useNotesStore } from "@/lib/notes/store";
 import { thumbnailOf, type Note } from "@/lib/notes/types";
 import { cn } from "@/lib/utils";
@@ -53,6 +54,7 @@ export function HomeScreen() {
   }, [hydrate]);
 
   const visible = useMemo(() => sortedNotes(notes, sort, query), [notes, sort, query]);
+  const grouped = useMemo(() => groupNotesByRelativeDate(visible), [visible]);
 
   async function onCreate() {
     const id = await createNote();
@@ -128,26 +130,38 @@ export function HomeScreen() {
       ) : visible.length === 0 ? (
         <EmptyState query={query} onCreate={() => void onCreate()} />
       ) : (
-        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {visible.map((note) => (
-            <li key={note.id} className="stagger-item">
-              <NoteCard
-                note={note}
-                onOpen={() => void navigate({ to: "/note/$noteId", params: { noteId: note.id } })}
-                onRename={() => {
-                  setRenaming(note);
-                  setRenameValue(note.title);
-                }}
-                onDuplicate={async () => {
-                  const id = await duplicateNote(note.id);
-                  toast("Note duplicated");
-                  void navigate({ to: "/note/$noteId", params: { noteId: id } });
-                }}
-                onDelete={() => setPendingDelete(note)}
-              />
-            </li>
+        <div className="flex flex-col gap-8">
+          {grouped.map((group) => (
+            <section key={group.id} aria-labelledby={`notes-group-${group.id}`}>
+              <h2
+                id={`notes-group-${group.id}`}
+                className="mb-3 text-xs font-medium uppercase tracking-[0.18em] text-muted"
+              >
+                {group.label}
+              </h2>
+              <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {group.notes.map((note) => (
+                  <li key={note.id} className="stagger-item">
+                    <NoteCard
+                      note={note}
+                      onOpen={() => void navigate({ to: "/note/$noteId", params: { noteId: note.id } })}
+                      onRename={() => {
+                        setRenaming(note);
+                        setRenameValue(note.title);
+                      }}
+                      onDuplicate={async () => {
+                        const id = await duplicateNote(note.id);
+                        toast("Note duplicated");
+                        void navigate({ to: "/note/$noteId", params: { noteId: id } });
+                      }}
+                      onDelete={() => setPendingDelete(note)}
+                    />
+                  </li>
+                ))}
+              </ul>
+            </section>
           ))}
-        </ul>
+        </div>
       )}
 
       <Button
