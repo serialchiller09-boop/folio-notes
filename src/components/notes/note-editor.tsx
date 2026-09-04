@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { ChevronLeft, Volume2 } from "lucide-react";
+import { ChevronLeft, CircleHelp, Volume2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { BlockShell } from "@/components/notes/block-shell";
@@ -10,9 +10,11 @@ import { ImageBlockView } from "@/components/notes/image-block";
 import { VideoBlockView } from "@/components/notes/video-block";
 import { TtsBar } from "@/components/notes/tts-bar";
 import { ThemeToggle } from "@/components/notes/theme-toggle";
+import { KeyboardShortcutsHelp, isTypingTarget } from "@/components/notes/keyboard-shortcuts-help";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { isEmptyHtml, sanitizeHtml, stripHtml } from "@/lib/notes/html";
 import { ExportMarkdownButton } from "@/components/notes/export-markdown-button";
+import { downloadNoteMarkdown } from "@/lib/notes/markdown";
 import { mediaFilesFromClipboard, toastMediaAdded } from "@/lib/notes/paste-media";
 import { isImageFile, isVideoFile } from "@/lib/notes/media";
 import { useNotesStore } from "@/lib/notes/store";
@@ -38,6 +40,7 @@ export function NoteEditor({ noteId }: { noteId: string }) {
   const [rate, setRate] = useState(1);
   const [voiceName, setVoiceName] = useState("");
   const [draggingFile, setDraggingFile] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const fileDragCount = useRef(0);
   const fileRef = useRef<HTMLInputElement>(null);
   const fileKind = useRef<"image" | "video" | "replace-image" | "replace-video">("image");
@@ -78,6 +81,27 @@ export function NoteEditor({ noteId }: { noteId: string }) {
       if (!snapshot) return;
       void saveNote(snapshot).then(() => setSaving("saved"));
     }, 380);
+  }
+
+  function saveNow() {
+    if (!note) return;
+    if (saveTimer.current) {
+      window.clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    const snapshot = pending.current ?? note;
+    setSaving("saving");
+    void saveNote(snapshot).then(() => {
+      pending.current = null;
+      setSaving("saved");
+      toast("Saved");
+    });
+  }
+
+  function exportMarkdown() {
+    if (!note) return;
+    downloadNoteMarkdown(note);
+    toast("Markdown downloaded");
   }
 
   function patch(updater: (current: Note) => Note) {
@@ -221,15 +245,35 @@ export function NoteEditor({ noteId }: { noteId: string }) {
 
   function onKeyDown(e: React.KeyboardEvent) {
     const meta = e.metaKey || e.ctrlKey;
-    if (meta && e.key.toLowerCase() === "b") {
+    const key = e.key.toLowerCase();
+
+    if ((meta && e.key === "/") || (e.key === "?" && !meta && !e.altKey && !isTypingTarget(e.target))) {
+      e.preventDefault();
+      setHelpOpen((open) => !open);
+      return;
+    }
+
+    if (meta && key === "s") {
+      e.preventDefault();
+      saveNow();
+      return;
+    }
+
+    if (meta && e.shiftKey && key === "e") {
+      e.preventDefault();
+      exportMarkdown();
+      return;
+    }
+
+    if (meta && key === "b") {
       e.preventDefault();
       runCommand("bold");
     }
-    if (meta && e.key.toLowerCase() === "i") {
+    if (meta && key === "i") {
       e.preventDefault();
       runCommand("italic");
     }
-    if (meta && e.key.toLowerCase() === "u") {
+    if (meta && key === "u") {
       e.preventDefault();
       runCommand("underline");
     }
@@ -307,6 +351,15 @@ export function NoteEditor({ noteId }: { noteId: string }) {
           <span className="hidden w-12 text-right text-xs text-subtle sm:block">
             {saving === "saving" ? "Saving" : "Saved"}
           </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Keyboard shortcuts"
+            onClick={() => setHelpOpen(true)}
+          >
+            <CircleHelp />
+          </Button>
           <ThemeToggle />
           <ExportMarkdownButton note={note} />
           <Button type="button" variant="secondary" size="sm" onClick={listen}>
@@ -475,6 +528,8 @@ export function NoteEditor({ noteId }: { noteId: string }) {
           tts.setRate(next);
         }}
       />
+
+      <KeyboardShortcutsHelp open={helpOpen} onOpenChange={setHelpOpen} />
     </div>
   );
 }
