@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { nid } from "@/lib/utils";
+import { stripHtml } from "./html";
 import { idbDeleteMedia, idbDeleteNote, idbGetAllNotes, idbGetMedia, idbGetMeta, idbPutMeta, idbPutNote } from "./idb";
 import { forgetMediaUrl, isImageFile, isVideoFile, putFile, captureVideoPoster, putBlob } from "./media";
 import { buildSeedNotes } from "./seed";
@@ -257,7 +258,7 @@ export function sortedNotes(notes: Note[], sort: SortMode, query: string): Note[
         if (note.title.toLowerCase().includes(q)) return true;
         return note.blocks.some((block) => {
           if (block.type !== "text") return false;
-          return block.html.replace(/<[^>]+>/g, " ").toLowerCase().includes(q);
+          return stripHtml(block.html).toLowerCase().includes(q);
         });
       })
     : notes;
