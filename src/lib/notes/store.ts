@@ -36,6 +36,18 @@ function withThumbnail(note: Note): Note {
   return { ...note, thumbnailMediaId: thumbnailOf(note) };
 }
 
+/** Build a unique duplicate title: Untitled → Untitled copy → Untitled copy 2. */
+function nextDuplicateTitle(sourceTitle: string, notes: Note[]): string {
+  const base =
+    (sourceTitle.trim() || "Untitled").replace(/\s+copy(?:\s+\d+)?$/i, "").trim() || "Untitled";
+  const taken = new Set(notes.map((note) => note.title.toLowerCase()));
+  let candidate = `${base} copy`;
+  if (!taken.has(candidate.toLowerCase())) return candidate;
+  let n = 2;
+  while (taken.has(`${base} copy ${n}`.toLowerCase())) n += 1;
+  return `${base} copy ${n}`;
+}
+
 export const useNotesStore = create<NotesState>((set, get) => ({
   ready: false,
   notes: [],
@@ -163,7 +175,7 @@ export const useNotesStore = create<NotesState>((set, get) => ({
     const note: Note = {
       ...source,
       id: nid("n"),
-      title: source.title === "Untitled" ? "Untitled" : `${source.title} copy`,
+      title: nextDuplicateTitle(source.title, get().notes),
       blocks,
       createdAt: now,
       updatedAt: now,
