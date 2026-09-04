@@ -1,5 +1,6 @@
 import { stripHtml } from "./html";
 import type { Note } from "./types";
+import { buildZip } from "./zip";
 
 /** Convert a text block's HTML to lightweight Markdown inline markup. */
 function inlineMarkdown(html: string): string {
@@ -77,17 +78,53 @@ function slugifyFilename(title: string): string {
   return slug || "untitled";
 }
 
-/** Download the current note as a `.md` file in the browser. */
-export function downloadNoteMarkdown(note: Note): void {
-  const markdown = noteToMarkdown(note);
-  const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
+function triggerDownload(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = `${slugifyFilename(note.title)}.md`;
+  anchor.download = filename;
   anchor.rel = "noopener";
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
   URL.revokeObjectURL(url);
+}
+
+/** Download the current note as a `.md` file in the browser. */
+export function downloadNoteMarkdown(note: Note): void {
+  const markdown = noteToMarkdown(note);
+  const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
+  triggerDownload(blob, `${slugifyFilename(note.title)}.md`);
+}
+
+/** Unique `.md` filenames for a batch export (title collisions get -2, -3, …). */
+export function uniqueMarkdownFilenames(notes: Note[]): string[] {
+  const used = new Map<string, number>();
+  return notes.map((note) => {
+    const base = slugifyFilename(note.title);
+    const count = (used.get(base) ?? 0) + 1;
+    used.set(base, count);
+    return count === 1 ? `${base}.md` : `${base}-${count}.md`;
+  });
+}
+
+function zipStamp(date = new Date()): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+/** Download every note as Markdown files inside a ZIP archive. */
+export function downloadAllNotesMarkdown(notes: Note[]): void {
+  if (!notes.length) return;
+  const encoder = new TextEncoder();
+  const names = uniqueMarkdownFilenames(notes);
+  const entries = notes.map((note, i) => ({
+    name: names[i]!,
+    data: encoder.encode(noteToMarkdown(note)),
+    modifiedAt: new Date(note.updatedAt),
+  }));
+  const blob = buildZip(entries);
+  triggerDownload(blob, `folio-notes-${zipStamp()}.zip`);
 }
