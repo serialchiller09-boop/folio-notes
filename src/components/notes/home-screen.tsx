@@ -22,6 +22,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { ExportAllButton } from "@/components/notes/export-all-button";
 import { ThemeToggle } from "@/components/notes/theme-toggle";
 import { useMediaUrl } from "@/hooks/use-media-url";
 import { previewText, stripHtml } from "@/lib/notes/html";
@@ -69,6 +70,7 @@ export function HomeScreen() {
           <p className="mt-2 max-w-md text-sm text-muted">Write. Paste a picture. Drop a clip. Keep going.</p>
         </div>
         <div className="flex items-center gap-1">
+          <ExportAllButton notes={visible} />
           <ThemeToggle />
           <Button onClick={() => void onCreate()} className="hidden sm:inline-flex">
             <Plus />
