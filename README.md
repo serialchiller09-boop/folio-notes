@@ -10,6 +10,7 @@ A quiet multimedia notebook for writing, pictures, and video. Notes are one cont
 - Inline video player with poster, seek, volume, and fullscreen
 - Autosave to IndexedDB on this device
 - Search, rename, duplicate, delete
+- Duplicate titles get a unique `copy` / `copy N` suffix (including Untitled → Untitled copy)
 - Home list grouped by last update: Today, Yesterday, Earlier this week, Older
 - Clear empty states: first-note CTA when the notebook is empty; clear-search + new-note when search finds nothing
 - Export the current note as Markdown (`.md`) — text keeps bold/italic structure; images and video become local placeholders
@@ -17,6 +18,7 @@ A quiet multimedia notebook for writing, pictures, and video. Notes are one cont
 
 ## What's new
 
+- **Duplicate naming** — Duplicating a note always adds a unique `copy` suffix: **Untitled** becomes **Untitled copy**, then **Untitled copy 2**, and so on. Named notes follow the same pattern without stacking `copy copy`.
 - **Empty home & search** — Zero notes shows a clear **Create your first note** CTA; a search with no matches offers **Clear search** and **New note**.
 - **Home date groups** — The notebook list is sectioned by `updatedAt` into **Today**, **Yesterday**, **Earlier this week**, and **Older**, so recent work is easier to find without changing sort or search.
 - **Markdown export** — From an open note, use **Export** in the header to download a `.md` file of the title and body. Handy for backups or pasting into other apps. Embedded pictures and clips are referenced as `folio-media:` placeholders (media stays on this device in IndexedDB).
