@@ -55,6 +55,7 @@ export function HomeScreen() {
 
   const visible = useMemo(() => sortedNotes(notes, sort, query), [notes, sort, query]);
   const grouped = useMemo(() => groupNotesByRelativeDate(visible), [visible]);
+  const noteCount = Object.keys(notes).length;
 
   async function onCreate() {
     const id = await createNote();
@@ -128,7 +129,12 @@ export function HomeScreen() {
           ))}
         </div>
       ) : visible.length === 0 ? (
-        <EmptyState query={query} onCreate={() => void onCreate()} />
+        <EmptyState
+          query={query}
+          hasNotes={noteCount > 0}
+          onCreate={() => void onCreate()}
+          onClearSearch={() => setQuery("")}
+        />
       ) : (
         <div className="flex flex-col gap-8">
           {grouped.map((group) => (
@@ -235,18 +241,49 @@ export function HomeScreen() {
   );
 }
 
-function EmptyState({ query, onCreate }: { query: string; onCreate: () => void }) {
+function EmptyState({
+  query,
+  hasNotes,
+  onCreate,
+  onClearSearch,
+}: {
+  query: string;
+  hasNotes: boolean;
+  onCreate: () => void;
+  onClearSearch: () => void;
+}) {
+  const trimmed = query.trim();
+  const isSearchMiss = hasNotes && trimmed.length > 0;
+
+  if (isSearchMiss) {
+    return (
+      <div className="rounded-xl bg-paper px-6 py-16 text-center shadow-border" role="status">
+        <p className="font-serif text-2xl text-fg">No notes match “{trimmed}”</p>
+        <p className="mx-auto mt-2 max-w-sm text-sm text-muted">
+          Try a different word, clear the search, or start a new note.
+        </p>
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+          <Button type="button" variant="secondary" onClick={onClearSearch}>
+            Clear search
+          </Button>
+          <Button type="button" onClick={onCreate}>
+            <Plus />
+            New note
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="rounded-xl bg-paper px-6 py-16 text-center shadow-border">
-      <p className="font-serif text-2xl text-fg">{query ? "Nothing matches" : "No notes yet"}</p>
+    <div className="rounded-xl bg-paper px-6 py-16 text-center shadow-border" role="status">
+      <p className="font-serif text-2xl text-fg">Your notebook is empty</p>
       <p className="mx-auto mt-2 max-w-sm text-sm text-muted">
-        {query
-          ? "Try a different word, or start a new note."
-          : "A blank page is ready. Type, paste a picture, or drop in a video."}
+        Start with a blank page — type, paste a picture, or drop in a video.
       </p>
-      <Button className="mt-6" onClick={onCreate}>
+      <Button type="button" className="mt-6" size="lg" onClick={onCreate}>
         <Plus />
-        New note
+        Create your first note
       </Button>
     </div>
   );
