@@ -16,10 +16,12 @@ export function VideoBlockView({
   block,
   selected,
   onWidth,
+  readOnly,
 }: {
   block: VideoBlockType;
   selected: boolean;
   onWidth: (width: number) => void;
+  readOnly?: boolean;
 }) {
   const src = useMediaUrl(block.mediaId);
   const poster = useMediaUrl(block.posterMediaId);
@@ -41,7 +43,6 @@ export function VideoBlockView({
     video.muted = muted;
   }, [volume, muted]);
 
-  // When the blob URL arrives, force a load so mobile WebViews pick up metadata
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !src) return;
@@ -102,7 +103,7 @@ export function VideoBlockView({
 
   return (
     <>
-      <ResizableMedia width={block.width} onWidth={onWidth} selected={selected}>
+      <ResizableMedia width={block.width} onWidth={onWidth} selected={selected} readOnly={readOnly}>
         <div
           ref={wrapRef}
           className="relative overflow-hidden rounded-md bg-fg"

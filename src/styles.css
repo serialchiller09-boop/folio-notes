@@ -143,6 +143,31 @@
   pointer-events: none;
 }
 
+.folio-reader {
+  max-width: 40rem;
+}
+
+.folio-chapter {
+  margin-top: 3.25rem;
+  margin-bottom: 1.25rem;
+  padding-top: 1.75rem;
+  border-top: 1px solid color-mix(in oklab, var(--folio-fg) 10%, transparent);
+}
+
+.folio-chapter:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.folio-evidence {
+  margin-inline: 0;
+}
+
+.folio-reader .folio-evidence {
+  margin-block: 2.25rem;
+}
+
 .stagger-item {
   opacity: 0;
   transform: translateY(10px);

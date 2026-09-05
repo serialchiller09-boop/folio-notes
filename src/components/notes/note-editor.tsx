@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { ChevronLeft, CircleHelp, Volume2 } from "lucide-react";
+import { BookOpen, ChevronLeft, CircleHelp, Volume2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { BlockShell } from "@/components/notes/block-shell";
@@ -11,13 +11,13 @@ import { VideoBlockView } from "@/components/notes/video-block";
 import { TtsBar } from "@/components/notes/tts-bar";
 import { ThemeToggle } from "@/components/notes/theme-toggle";
 import { KeyboardShortcutsHelp, isTypingTarget } from "@/components/notes/keyboard-shortcuts-help";
-import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { isEmptyHtml, sanitizeHtml, stripHtml } from "@/lib/notes/html";
+import { focusEditable, splitEditableAtCaret } from "@/lib/notes/caret";
 import { ExportMarkdownButton } from "@/components/notes/export-markdown-button";
 import { downloadNoteMarkdown } from "@/lib/notes/markdown";
 import { mediaFilesFromClipboard, toastMediaAdded } from "@/lib/notes/paste-media";
 import { isImageFile, isVideoFile } from "@/lib/notes/media";
-import { useNotesStore } from "@/lib/notes/store";
+import { useNotesStore, type MediaSplit } from "@/lib/notes/store";
 import { pickEnglishFemaleVoice, tts, type TtsStatus } from "@/lib/notes/tts";
 import { emptyTextBlock, type Align, type Block, type FontSize, type Note, type TextRole } from "@/lib/notes/types";
 import { nid } from "@/lib/utils";
@@ -32,8 +32,6 @@ export function NoteEditor({ noteId }: { noteId: string }) {
   const note = notes.find((item) => item.id === noteId);
 
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [dragId, setDragId] = useState<string | null>(null);
-  const [dropId, setDropId] = useState<string | null>(null);
   const [saving, setSaving] = useState<"saved" | "saving">("saved");
   const [ttsStatus, setTtsStatus] = useState<TtsStatus>("idle");
   const [speakingId, setSpeakingId] = useState<string | null>(null);
@@ -45,6 +43,7 @@ export function NoteEditor({ noteId }: { noteId: string }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const fileKind = useRef<"image" | "video" | "replace-image" | "replace-video">("image");
   const replaceId = useRef<string | null>(null);
+  const pendingSplit = useRef<MediaSplit | null>(null);
   const saveTimer = useRef<number | null>(null);
   const pending = useRef<Note | null>(null);
 
@@ -156,18 +155,6 @@ export function NoteEditor({ noteId }: { noteId: string }) {
     );
   }
 
-  function moveBlock(id: string, dir: -1 | 1) {
-    updateBlocks((blocks) => {
-      const index = blocks.findIndex((block) => block.id === id);
-      const nextIndex = index + dir;
-      if (index < 0 || nextIndex < 0 || nextIndex >= blocks.length) return blocks;
-      const copy = [...blocks];
-      const [item] = copy.splice(index, 1);
-      copy.splice(nextIndex, 0, item);
-      return copy;
-    });
-  }
-
   function removeBlock(id: string) {
     updateBlocks((blocks) => {
       const next = blocks.filter((block) => block.id !== id);
@@ -175,24 +162,21 @@ export function NoteEditor({ noteId }: { noteId: string }) {
     });
   }
 
-  function dropBlock(targetId: string) {
-    if (!dragId || dragId === targetId) return;
-    updateBlocks((blocks) => {
-      const from = blocks.findIndex((block) => block.id === dragId);
-      const to = blocks.findIndex((block) => block.id === targetId);
-      if (from < 0 || to < 0) return blocks;
-      const copy = [...blocks];
-      const [item] = copy.splice(from, 1);
-      copy.splice(to, 0, item);
-      return copy;
-    });
-    setDragId(null);
-    setDropId(null);
+  function captureCaretSplit(): MediaSplit | null {
+    if (!activeText) return null;
+    const el = document
+      .getElementById(`block-${activeText.id}`)
+      ?.querySelector<HTMLElement>("[contenteditable]");
+    if (!el) return null;
+    const parts = splitEditableAtCaret(el);
+    if (!parts) return null;
+    return { blockId: activeText.id, beforeHtml: parts.beforeHtml, afterHtml: parts.afterHtml };
   }
 
   function pickFile(kind: "image" | "video") {
     fileKind.current = kind;
     replaceId.current = null;
+    pendingSplit.current = captureCaretSplit();
     if (fileRef.current) {
       fileRef.current.accept = kind === "image" ? "image/*" : "video/*";
       fileRef.current.click();
@@ -202,6 +186,7 @@ export function NoteEditor({ noteId }: { noteId: string }) {
   function pickReplace(id: string, kind: "image" | "video") {
     fileKind.current = kind === "image" ? "replace-image" : "replace-video";
     replaceId.current = id;
+    pendingSplit.current = null;
     if (fileRef.current) {
       fileRef.current.accept = kind === "image" ? "image/*" : "video/*";
       fileRef.current.click();
@@ -222,8 +207,30 @@ export function NoteEditor({ noteId }: { noteId: string }) {
       replaceId.current = null;
       return;
     }
+    if (saveTimer.current) {
+      window.clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    pending.current = null;
+    const split = pendingSplit.current;
+    pendingSplit.current = null;
     try {
-      await insertFiles(note.id, usable, activeId);
+      await insertFiles(note.id, usable, activeId, split);
+      const latest = useNotesStore.getState().notes.find((item) => item.id === note.id);
+      const after = latest?.blocks.find((block, i, all) => {
+        if (block.type !== "text") return false;
+        const prev = all[i - 1];
+        return Boolean(prev && (prev.type === "image" || prev.type === "video"));
+      });
+      const focusId =
+        latest?.blocks
+          .map((block, i, all) => ({ block, prev: all[i - 1] }))
+          .reverse()
+          .find((item) => item.block.type === "text" && item.prev && item.prev.type !== "text")?.block.id ?? after?.id;
+      if (focusId) {
+        setActiveId(focusId);
+        focusEditable(focusId);
+      }
     } catch {
       toast("Could not add that file. It may be too large for this device.");
     }
@@ -233,6 +240,7 @@ export function NoteEditor({ noteId }: { noteId: string }) {
     const media = mediaFilesFromClipboard(e.clipboardData);
     if (media.length) {
       e.preventDefault();
+      pendingSplit.current = captureCaretSplit();
       void onFiles(media).then(() => toastMediaAdded(media));
       return;
     }
@@ -316,18 +324,32 @@ export function NoteEditor({ noteId }: { noteId: string }) {
     tts.start(queue, rate);
   }
 
+  function continueAtEnd() {
+    if (!note) return;
+    const last = note.blocks[note.blocks.length - 1];
+    if (last?.type === "text") {
+      setActiveId(last.id);
+      focusEditable(last.id);
+      return;
+    }
+    const fresh = emptyTextBlock({ id: nid("b") });
+    updateBlocks((blocks) => [...blocks, fresh]);
+    setActiveId(fresh.id);
+    focusEditable(fresh.id);
+  }
+
   if (!ready) {
     return (
-      <main className="flex min-h-dvh items-center justify-center text-sm text-muted">Opening note…</main>
+      <main className="flex min-h-dvh items-center justify-center text-sm text-muted">Opening story…</main>
     );
   }
 
   if (!note) {
     return (
       <main className="flex min-h-dvh flex-col items-center justify-center gap-3 px-6 text-center">
-        <p className="font-serif text-2xl">This note is gone</p>
+        <p className="font-serif text-2xl">This story is gone</p>
         <Button asChild variant="secondary">
-          <Link to="/">Back to notes</Link>
+          <Link to="/">Back to library</Link>
         </Button>
       </main>
     );
@@ -337,7 +359,7 @@ export function NoteEditor({ noteId }: { noteId: string }) {
     <div className="min-h-dvh bg-bg pb-24" onPaste={onPaste} onKeyDown={onKeyDown}>
       <header className="sticky top-0 z-20 border-b border-border bg-bg/92">
         <div className="mx-auto flex max-w-3xl items-center gap-1 px-2 py-2">
-          <Button asChild variant="ghost" size="icon-sm" aria-label="Back to notes">
+          <Button asChild variant="ghost" size="icon-sm" aria-label="Back to library">
             <Link to="/">
               <ChevronLeft />
             </Link>
@@ -346,7 +368,7 @@ export function NoteEditor({ noteId }: { noteId: string }) {
             value={note.title}
             onChange={(e) => onTitle(e.target.value)}
             className="min-w-0 flex-1 bg-transparent font-serif text-lg font-medium tracking-tight text-fg outline-none"
-            aria-label="Note title"
+            aria-label="Story title"
           />
           <span className="hidden w-12 text-right text-xs text-subtle sm:block">
             {saving === "saving" ? "Saving" : "Saved"}
@@ -362,7 +384,13 @@ export function NoteEditor({ noteId }: { noteId: string }) {
           </Button>
           <ThemeToggle />
           <ExportMarkdownButton note={note} />
-          <Button type="button" variant="secondary" size="sm" onClick={listen}>
+          <Button asChild variant="secondary" size="sm">
+            <Link to="/note/$noteId" params={{ noteId }} search={{ view: "read" }}>
+              <BookOpen />
+              <span className="hidden sm:inline">Read</span>
+            </Link>
+          </Button>
+          <Button type="button" variant="ghost" size="sm" onClick={listen}>
             <Volume2 />
             <span className="hidden sm:inline">
               {ttsStatus === "playing" ? "Pause" : ttsStatus === "paused" ? "Resume" : "Listen"}
@@ -383,7 +411,7 @@ export function NoteEditor({ noteId }: { noteId: string }) {
       </header>
 
       <article
-        className="folio-doc relative mx-auto my-4 max-w-3xl rounded-xl bg-paper px-5 py-8 shadow-border sm:my-8 sm:px-12 sm:py-12"
+        className="folio-doc relative mx-auto my-4 max-w-3xl px-5 py-8 sm:my-8 sm:px-12 sm:py-12"
         onDragEnter={(e) => {
           if (![...e.dataTransfer.types].includes("Files")) return;
           fileDragCount.current += 1;
@@ -406,6 +434,7 @@ export function NoteEditor({ noteId }: { noteId: string }) {
           e.preventDefault();
           fileDragCount.current = 0;
           setDraggingFile(false);
+          pendingSplit.current = captureCaretSplit();
           void onFiles([...e.dataTransfer.files]);
         }}
       >
@@ -415,37 +444,8 @@ export function NoteEditor({ noteId }: { noteId: string }) {
               selected={activeId === block.id}
               speaking={speakingId === block.id}
               onSelect={() => setActiveId(block.id)}
-              onMove={(dir) => moveBlock(block.id, dir)}
               onRemove={() => removeBlock(block.id)}
-              dragging={dragId === block.id}
-              dropTarget={dropId === block.id}
-              onDragStart={(e) => {
-                setDragId(block.id);
-                e.dataTransfer.setData("text/block-id", block.id);
-                e.dataTransfer.effectAllowed = "move";
-              }}
-              onDragOver={(e) => {
-                if (![...e.dataTransfer.types].includes("Files")) return;
-                if (!dragId) return;
-                e.preventDefault();
-                setDropId(block.id);
-              }}
-              onDrop={(e) => {
-                if (![...e.dataTransfer.types].includes("Files")) return;
-                e.preventDefault();
-                dropBlock(block.id);
-              }}
-              onDragEnd={() => {
-                setDragId(null);
-                setDropId(null);
-              }}
-              extraMenu={
-                block.type === "image" || block.type === "video" ? (
-                  <DropdownMenuItem onSelect={() => pickReplace(block.id, block.type)}>
-                    Replace {block.type}
-                  </DropdownMenuItem>
-                ) : null
-              }
+              canRemove={block.type !== "text"}
             >
               {block.type === "text" ? (
                 <TextBlockView
@@ -454,25 +454,43 @@ export function NoteEditor({ noteId }: { noteId: string }) {
                   onFocus={() => setActiveId(block.id)}
                 />
               ) : block.type === "image" ? (
-                <ImageBlockView
-                  block={block}
-                  selected={activeId === block.id}
-                  onWidth={(width) =>
-                    updateBlocks((blocks) =>
-                      blocks.map((item) => (item.id === block.id && item.type === "image" ? { ...item, width } : item)),
-                    )
-                  }
-                />
+                <figure className="folio-evidence my-6">
+                  <ImageBlockView
+                    block={block}
+                    selected={activeId === block.id}
+                    onWidth={(width) =>
+                      updateBlocks((blocks) =>
+                        blocks.map((item) => (item.id === block.id && item.type === "image" ? { ...item, width } : item)),
+                      )
+                    }
+                  />
+                  <button
+                    type="button"
+                    className="mt-1 text-xs text-subtle hover:text-muted"
+                    onClick={() => pickReplace(block.id, "image")}
+                  >
+                    Replace photograph
+                  </button>
+                </figure>
               ) : (
-                <VideoBlockView
-                  block={block}
-                  selected={activeId === block.id}
-                  onWidth={(width) =>
-                    updateBlocks((blocks) =>
-                      blocks.map((item) => (item.id === block.id && item.type === "video" ? { ...item, width } : item)),
-                    )
-                  }
-                />
+                <figure className="folio-evidence my-6">
+                  <VideoBlockView
+                    block={block}
+                    selected={activeId === block.id}
+                    onWidth={(width) =>
+                      updateBlocks((blocks) =>
+                        blocks.map((item) => (item.id === block.id && item.type === "video" ? { ...item, width } : item)),
+                      )
+                    }
+                  />
+                  <button
+                    type="button"
+                    className="mt-1 text-xs text-subtle hover:text-muted"
+                    onClick={() => pickReplace(block.id, "video")}
+                  >
+                    Replace video
+                  </button>
+                </figure>
               )}
             </BlockShell>
           </div>
@@ -480,25 +498,14 @@ export function NoteEditor({ noteId }: { noteId: string }) {
 
         <button
           type="button"
-          className="mt-4 w-full rounded-md px-2 py-6 text-left text-sm text-subtle hover:text-muted"
-          onClick={() => {
-            const last = note.blocks[note.blocks.length - 1];
-            if (last?.type === "text" && isEmptyHtml(last.html)) {
-              setActiveId(last.id);
-              document.getElementById(`block-${last.id}`)?.querySelector<HTMLElement>("[contenteditable]")?.focus();
-              return;
-            }
-            const fresh = emptyTextBlock({ id: nid("b") });
-            updateBlocks((blocks) => [...blocks, fresh]);
-            setActiveId(fresh.id);
-          }}
-        >
-          Continue writing
-        </button>
+          className="mt-2 min-h-24 w-full cursor-text rounded-md px-2 py-8 text-left text-sm text-subtle/0"
+          aria-label="Continue writing"
+          onClick={continueAtEnd}
+        />
         {draggingFile ? (
           <div className="pointer-events-none absolute inset-3 flex items-center justify-center rounded-lg border border-dashed border-accent bg-paper/80">
             <p className="rounded-md bg-paper px-4 py-2 text-sm text-fg shadow-border">
-              Drop pictures or video onto the page
+              Drop a photograph or video into the story
             </p>
           </div>
         ) : null}

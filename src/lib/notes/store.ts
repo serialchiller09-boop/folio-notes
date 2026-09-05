@@ -13,6 +13,12 @@ import {
   type SortMode,
 } from "./types";
 
+export type MediaSplit = {
+  blockId: string;
+  beforeHtml: string;
+  afterHtml: string;
+};
+
 type NotesState = {
   ready: boolean;
   notes: Note[];
@@ -27,7 +33,12 @@ type NotesState = {
   togglePin: (id: string) => Promise<void>;
   deleteNote: (id: string) => Promise<void>;
   duplicateNote: (id: string) => Promise<string>;
-  insertFiles: (noteId: string, files: File[], afterId?: string | null) => Promise<void>;
+  insertFiles: (
+    noteId: string,
+    files: File[],
+    afterId?: string | null,
+    split?: MediaSplit | null,
+  ) => Promise<void>;
   replaceBlockMedia: (noteId: string, blockId: string, file: File) => Promise<void>;
 };
 
@@ -135,7 +146,6 @@ export const useNotesStore = create<NotesState>((set, get) => ({
   togglePin: async (id) => {
     const note = get().notes.find((item) => item.id === id);
     if (!note) return;
-    // Pin is list metadata — keep updatedAt so date groups stay stable when unpinning.
     const next: Note = { ...note, pinned: !note.pinned };
     await idbPutNote(next);
     set({
@@ -199,13 +209,23 @@ export const useNotesStore = create<NotesState>((set, get) => ({
     return note.id;
   },
 
-  insertFiles: async (noteId, files, afterId) => {
+  insertFiles: async (noteId, files, afterId, split) => {
     const note = get().notes.find((item) => item.id === noteId);
     if (!note) return;
     const blocks = [...note.blocks];
+
+    if (split) {
+      const at = blocks.findIndex((block) => block.id === split.blockId);
+      if (at >= 0 && blocks[at]?.type === "text") {
+        blocks[at] = { ...blocks[at], html: split.beforeHtml };
+        afterId = split.blockId;
+      }
+    }
+
     let index = afterId ? blocks.findIndex((block) => block.id === afterId) : blocks.length - 1;
     if (index < 0) index = blocks.length - 1;
 
+    let lastTextId: string | null = null;
     for (const file of files) {
       if (isImageFile(file)) {
         const rec = await putFile(file);
@@ -216,7 +236,9 @@ export const useNotesStore = create<NotesState>((set, get) => ({
           width: 100,
           alt: file.name.replace(/\.[^.]+$/, ""),
         };
-        blocks.splice(index + 1, 0, block, emptyTextBlock());
+        const fresh = emptyTextBlock({ id: nid("b") });
+        lastTextId = fresh.id;
+        blocks.splice(index + 1, 0, block, fresh);
         index += 2;
         continue;
       }
@@ -231,8 +253,17 @@ export const useNotesStore = create<NotesState>((set, get) => ({
           width: 100,
           posterMediaId: poster?.id,
         };
-        blocks.splice(index + 1, 0, block, emptyTextBlock());
+        const fresh = emptyTextBlock({ id: nid("b") });
+        lastTextId = fresh.id;
+        blocks.splice(index + 1, 0, block, fresh);
         index += 2;
+      }
+    }
+
+    if (split?.afterHtml && lastTextId) {
+      const i = blocks.findIndex((block) => block.id === lastTextId);
+      if (i >= 0 && blocks[i]?.type === "text") {
+        blocks[i] = { ...blocks[i], html: split.afterHtml };
       }
     }
 
