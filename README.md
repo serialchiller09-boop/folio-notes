@@ -1,31 +1,25 @@
 # Folio
 
-A quiet multimedia notebook for writing, pictures, and video. Notes are one continuous page — text, images, and clips sit in the same flow. Playback and text-to-speech stay on the page.
+A novel with cinematic evidence. Write one continuous story. Photographs and videos sit inside the prose. Read it like a book.
 
 ## What it does
 
-- Continuous document editor (no pages)
-- Basic formatting: bold, italic, underline, headings, size, alignment
-- Insert or paste images and videos
-- Inline video player with poster, seek, volume, and fullscreen
+- Continuous document editor — type, insert a photo or video at the cursor, keep writing
+- Story reader — scroll from beginning to end. No pages. No Next
+- Chapters as landmarks inside the same story
+- Inline photographs (tap to examine) and video
 - Autosave to IndexedDB on this device
-- Search, rename, duplicate, delete
-- Pin favorites to a Pinned section above the home date groups
-- Duplicate titles get a unique `copy` / `copy N` suffix (including Untitled → Untitled copy)
-- Home list grouped by last update: Today, Yesterday, Earlier this week, Older
-- Clear empty states: first-note CTA when the notebook is empty; clear-search + new-note when search finds nothing
-- Export the current note as Markdown (`.md`) — text keeps bold/italic structure; images and video become local placeholders
-- Text-to-speech with a preferred English female voice, play/pause, speed, and paragraph highlight
+- Search, rename, duplicate, delete, pin
+- Export the current story as Markdown (`.md`)
+- Listen to Story — text-to-speech follows the prose
 
-## What's new
+## Write. Insert. Keep writing.
 
-- **Pin notes** — From a note card’s menu, **Pin** keeps it in a **Pinned** section at the top of the home list (above Today / Yesterday / …). Pin state is saved with the note in IndexedDB and does not change `updatedAt`.
-- **Duplicate naming** — Duplicating a note always adds a unique `copy` suffix: **Untitled** becomes **Untitled copy**, then **Untitled copy 2**, and so on. Named notes follow the same pattern without stacking `copy copy`.
-- **Empty home & search** — Zero notes shows a clear **Create your first note** CTA; a search with no matches offers **Clear search** and **New note**.
-- **Home date groups** — The notebook list is sectioned by `updatedAt` into **Today**, **Yesterday**, **Earlier this week**, and **Older**, so recent work is easier to find without changing sort or search.
-- **Markdown export** — From an open note, use **Export** in the header to download a `.md` file of the title and body. Handy for backups or pasting into other apps. Embedded pictures and clips are referenced as `folio-media:` placeholders (media stays on this device in IndexedDB).
-- **Paste polish** — Pasting a screenshot or clipboard image now also checks clipboard items (not only the Files list), and shows a short confirmation toast.
-- **Search matching** — Note search now strips HTML the same way previews do, so queries match visible text more reliably.
+Place the cursor in a paragraph, insert a photograph or video, and continue typing immediately after it. Blocks are an implementation detail. The story is one piece of writing.
+
+## Scroll. Read. Watch. Read.
+
+**Read** opens StoryPlayer: a continuous vertical story. Text, photographs, videos, and chapter headings appear in order. Stop anywhere. Scroll back. Replay a clip. Listen if you want — audio is an enhancement, not the structure.
 
 ## Local development
 
@@ -34,4 +28,4 @@ npm install
 npm run dev
 ```
 
-Notes and media stay in the browser. Deleting a note removes its unused media.
+Stories and media stay in the browser. Deleting a story removes its unused media.
