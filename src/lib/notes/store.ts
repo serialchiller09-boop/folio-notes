@@ -24,6 +24,7 @@ type NotesState = {
   createNote: () => Promise<string>;
   saveNote: (note: Note) => Promise<void>;
   renameNote: (id: string, title: string) => Promise<void>;
+  togglePin: (id: string) => Promise<void>;
   deleteNote: (id: string) => Promise<void>;
   duplicateNote: (id: string) => Promise<string>;
   insertFiles: (noteId: string, files: File[], afterId?: string | null) => Promise<void>;
@@ -131,6 +132,17 @@ export const useNotesStore = create<NotesState>((set, get) => ({
     await get().saveNote({ ...note, title });
   },
 
+  togglePin: async (id) => {
+    const note = get().notes.find((item) => item.id === id);
+    if (!note) return;
+    // Pin is list metadata — keep updatedAt so date groups stay stable when unpinning.
+    const next: Note = { ...note, pinned: !note.pinned };
+    await idbPutNote(next);
+    set({
+      notes: get().notes.map((item) => (item.id === next.id ? next : item)),
+    });
+  },
+
   deleteNote: async (id) => {
     const notes = get().notes;
     const target = notes.find((item) => item.id === id);
@@ -180,6 +192,7 @@ export const useNotesStore = create<NotesState>((set, get) => ({
       createdAt: now,
       updatedAt: now,
       thumbnailMediaId: source.thumbnailMediaId ? (remap.get(source.thumbnailMediaId) ?? null) : null,
+      pinned: false,
     };
     await idbPutNote(note);
     set({ notes: [note, ...get().notes] });

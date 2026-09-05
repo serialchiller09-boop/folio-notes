@@ -36,6 +36,8 @@ export type Note = {
   createdAt: number;
   updatedAt: number;
   thumbnailMediaId?: string | null;
+  /** When true, the note appears in the home Pinned section above date groups. */
+  pinned?: boolean;
 };
 
 export type MediaRecord = {

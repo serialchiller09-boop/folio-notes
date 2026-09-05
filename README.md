@@ -10,6 +10,7 @@ A quiet multimedia notebook for writing, pictures, and video. Notes are one cont
 - Inline video player with poster, seek, volume, and fullscreen
 - Autosave to IndexedDB on this device
 - Search, rename, duplicate, delete
+- Pin favorites to a Pinned section above the home date groups
 - Duplicate titles get a unique `copy` / `copy N` suffix (including Untitled → Untitled copy)
 - Home list grouped by last update: Today, Yesterday, Earlier this week, Older
 - Clear empty states: first-note CTA when the notebook is empty; clear-search + new-note when search finds nothing
@@ -18,6 +19,7 @@ A quiet multimedia notebook for writing, pictures, and video. Notes are one cont
 
 ## What's new
 
+- **Pin notes** — From a note card’s menu, **Pin** keeps it in a **Pinned** section at the top of the home list (above Today / Yesterday / …). Pin state is saved with the note in IndexedDB and does not change `updatedAt`.
 - **Duplicate naming** — Duplicating a note always adds a unique `copy` suffix: **Untitled** becomes **Untitled copy**, then **Untitled copy 2**, and so on. Named notes follow the same pattern without stacking `copy copy`.
 - **Empty home & search** — Zero notes shows a clear **Create your first note** CTA; a search with no matches offers **Clear search** and **New note**.
 - **Home date groups** — The notebook list is sectioned by `updatedAt` into **Today**, **Yesterday**, **Earlier this week**, and **Older**, so recent work is easier to find without changing sort or search.

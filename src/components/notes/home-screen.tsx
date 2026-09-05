@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { formatDistanceToNow } from "date-fns";
-import { Copy, MoreHorizontal, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { Copy, MoreHorizontal, Pencil, Pin, PinOff, Plus, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,6 +44,7 @@ export function HomeScreen() {
   const deleteNote = useNotesStore((s) => s.deleteNote);
   const duplicateNote = useNotesStore((s) => s.duplicateNote);
   const renameNote = useNotesStore((s) => s.renameNote);
+  const togglePin = useNotesStore((s) => s.togglePin);
 
   const [pendingDelete, setPendingDelete] = useState<Note | null>(null);
   const [renaming, setRenaming] = useState<Note | null>(null);
@@ -54,12 +55,40 @@ export function HomeScreen() {
   }, [hydrate]);
 
   const visible = useMemo(() => sortedNotes(notes, sort, query), [notes, sort, query]);
-  const grouped = useMemo(() => groupNotesByRelativeDate(visible), [visible]);
+  const pinnedNotes = useMemo(() => visible.filter((note) => note.pinned), [visible]);
+  const unpinnedNotes = useMemo(() => visible.filter((note) => !note.pinned), [visible]);
+  const grouped = useMemo(() => groupNotesByRelativeDate(unpinnedNotes), [unpinnedNotes]);
   const noteCount = Object.keys(notes).length;
 
   async function onCreate() {
     const id = await createNote();
     void navigate({ to: "/note/$noteId", params: { noteId: id } });
+  }
+
+  function renderNoteCard(note: Note) {
+    return (
+      <li key={note.id} className="stagger-item">
+        <NoteCard
+          note={note}
+          onOpen={() => void navigate({ to: "/note/$noteId", params: { noteId: note.id } })}
+          onRename={() => {
+            setRenaming(note);
+            setRenameValue(note.title);
+          }}
+          onTogglePin={async () => {
+            const willPin = !note.pinned;
+            await togglePin(note.id);
+            toast(willPin ? "Note pinned" : "Note unpinned");
+          }}
+          onDuplicate={async () => {
+            const id = await duplicateNote(note.id);
+            toast("Note duplicated");
+            void navigate({ to: "/note/$noteId", params: { noteId: id } });
+          }}
+          onDelete={() => setPendingDelete(note)}
+        />
+      </li>
+    );
   }
 
   return (
@@ -137,6 +166,17 @@ export function HomeScreen() {
         />
       ) : (
         <div className="flex flex-col gap-8">
+          {pinnedNotes.length > 0 ? (
+            <section aria-labelledby="notes-group-pinned">
+              <h2
+                id="notes-group-pinned"
+                className="mb-3 text-xs font-medium uppercase tracking-[0.18em] text-muted"
+              >
+                Pinned
+              </h2>
+              <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{pinnedNotes.map(renderNoteCard)}</ul>
+            </section>
+          ) : null}
           {grouped.map((group) => (
             <section key={group.id} aria-labelledby={`notes-group-${group.id}`}>
               <h2
@@ -145,26 +185,7 @@ export function HomeScreen() {
               >
                 {group.label}
               </h2>
-              <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {group.notes.map((note) => (
-                  <li key={note.id} className="stagger-item">
-                    <NoteCard
-                      note={note}
-                      onOpen={() => void navigate({ to: "/note/$noteId", params: { noteId: note.id } })}
-                      onRename={() => {
-                        setRenaming(note);
-                        setRenameValue(note.title);
-                      }}
-                      onDuplicate={async () => {
-                        const id = await duplicateNote(note.id);
-                        toast("Note duplicated");
-                        void navigate({ to: "/note/$noteId", params: { noteId: id } });
-                      }}
-                      onDelete={() => setPendingDelete(note)}
-                    />
-                  </li>
-                ))}
-              </ul>
+              <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{group.notes.map(renderNoteCard)}</ul>
             </section>
           ))}
         </div>
@@ -293,12 +314,14 @@ function NoteCard({
   note,
   onOpen,
   onRename,
+  onTogglePin,
   onDuplicate,
   onDelete,
 }: {
   note: Note;
   onOpen: () => void;
   onRename: () => void;
+  onTogglePin: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
 }) {
@@ -307,6 +330,7 @@ function NoteCard({
   const thumbId = thumbnailOf(note);
   const thumb = useMediaUrl(thumbId);
   const videoBlock = note.blocks.find((b) => b.type === "video");
+  const isPinned = !!note.pinned;
 
   return (
     <article className="group relative flex h-full flex-col overflow-hidden rounded-xl bg-paper shadow-border transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5">
@@ -326,6 +350,14 @@ function NoteCard({
           {videoBlock ? (
             <span className="absolute bottom-3 left-3 rounded-full bg-fg/80 px-2 py-1 text-xs font-medium uppercase tracking-wide text-bg">
               Video
+            </span>
+          ) : null}
+          {isPinned ? (
+            <span
+              className="absolute top-3 right-3 rounded-full bg-fg/80 p-1.5 text-bg"
+              aria-label="Pinned"
+            >
+              <Pin className="size-3.5" fill="currentColor" />
             </span>
           ) : null}
         </div>
@@ -351,6 +383,10 @@ function NoteCard({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={onTogglePin}>
+              {isPinned ? <PinOff className="size-4" /> : <Pin className="size-4" />}
+              {isPinned ? "Unpin" : "Pin"}
+            </DropdownMenuItem>
             <DropdownMenuItem onSelect={onRename}>
               <Pencil className="size-4" />
               Rename
