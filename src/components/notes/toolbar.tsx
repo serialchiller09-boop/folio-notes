@@ -93,7 +93,7 @@ export function FormatToolbar({
                 variant="ghost"
                 size="icon-sm"
                 onMouseDown={(e) => e.preventDefault()}
-                aria-label="Heading"
+                aria-label="Style"
               >
                 {text?.role === "h1" ? <Heading1 /> : text?.role === "h2" ? <Heading2 /> : <Type />}
               </Button>
@@ -103,9 +103,9 @@ export function FormatToolbar({
         </Tooltip>
         <DropdownMenuContent>
           <DropdownMenuItem onSelect={() => onRole("paragraph")}>Paragraph</DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => onRole("h1")}>Heading 1</DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => onRole("h2")}>Heading 2</DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => onRole("h3")}>Heading 3</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => onRole("h1")}>Chapter</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => onRole("h2")}>Heading</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => onRole("h3")}>Subheading</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
       <DropdownMenu>
@@ -138,7 +138,7 @@ export function FormatToolbar({
         <AlignRight />
       </Tool>
       <Separator orientation="vertical" className="mx-1 h-6" />
-      <Tool label="Insert image" onClick={onInsertImage}>
+      <Tool label="Insert photograph" onClick={onInsertImage}>
         <ImagePlus />
       </Tool>
       <Tool label="Insert video" onClick={onInsertVideo}>
