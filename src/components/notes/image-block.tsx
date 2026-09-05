@@ -8,22 +8,24 @@ export function ImageBlockView({
   block,
   selected,
   onWidth,
+  readOnly,
 }: {
   block: ImageBlockType;
   selected: boolean;
   onWidth: (width: number) => void;
+  readOnly?: boolean;
 }) {
   const url = useMediaUrl(block.mediaId);
   const [open, setOpen] = useState(false);
 
   return (
     <>
-      <ResizableMedia width={block.width} onWidth={onWidth} selected={selected}>
+      <ResizableMedia width={block.width} onWidth={onWidth} selected={selected} readOnly={readOnly}>
         {url ? (
           <button type="button" onClick={() => setOpen(true)} className="block w-full">
             <img
               src={url}
-              alt={block.alt || "Note image"}
+              alt={block.alt || "Photograph"}
               draggable={false}
               className="media-frame max-h-[70vh] w-full rounded-md object-contain"
             />
@@ -39,7 +41,7 @@ export function ImageBlockView({
           showClose
           className="max-h-[92dvh] w-[min(96vw,1100px)] overflow-auto bg-bg p-2"
         >
-          <DialogTitle className="sr-only">{block.alt || "Image"}</DialogTitle>
+          <DialogTitle className="sr-only">{block.alt || "Photograph"}</DialogTitle>
           {url ? (
             <img src={url} alt={block.alt || ""} className="mx-auto max-h-[86dvh] w-auto rounded-md" />
           ) : null}
@@ -53,11 +55,13 @@ export function ResizableMedia({
   width,
   onWidth,
   selected,
+  readOnly,
   children,
 }: {
   width: number;
   onWidth: (width: number) => void;
   selected: boolean;
+  readOnly?: boolean;
   children: React.ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -85,15 +89,17 @@ export function ResizableMedia({
   return (
     <div ref={ref} className="relative mx-auto" style={{ width: `${width}%` }}>
       {children}
-      <button
-        type="button"
-        aria-label="Resize"
-        onPointerDown={onDown}
-        className={cn(
-          "absolute bottom-2 right-2 size-6 rounded-sm bg-fg/75 text-bg",
-          selected ? "opacity-100" : "opacity-0 group-hover/block:opacity-100",
-        )}
-      />
+      {readOnly ? null : (
+        <button
+          type="button"
+          aria-label="Resize"
+          onPointerDown={onDown}
+          className={cn(
+            "absolute bottom-2 right-2 size-6 rounded-sm bg-fg/75 text-bg",
+            selected ? "opacity-100" : "opacity-0 group-hover/block:opacity-100",
+          )}
+        />
+      )}
     </div>
   );
 }
